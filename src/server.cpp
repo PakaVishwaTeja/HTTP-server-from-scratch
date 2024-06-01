@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <string>
 #include <cstring>
+#include <map>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -9,6 +10,64 @@
 #include <netdb.h>
 #include <vector>
 #include <sstream>
+
+struct HTTPRequest {
+    std::string method;
+    std::string path;
+    std::string version;
+    std::map<std::string, std::string> headers;
+    std::string body;
+};
+struct HTTPResponse {
+    std::string status;
+    std::string content_type;
+    std::map<std::string, std::string> headers;
+    std::string body;
+    std::string to_string() {
+        std::string response;
+        response += status + "\r\n";
+        response += "Content-Type: " + content_type + "\r\n";
+        for (const auto& header : headers) {
+            response += header.first + ": " + header.second + "\r\n";
+        }
+        response += "\r\n";
+        response += body;
+        return response;
+    }
+};
+void write_response(int client_fd, HTTPResponse response) {
+    std::string response_str = response.to_string();
+    ssize_t bytes_written = write(client_fd, response_str.c_str(), response_str.size());
+    if (bytes_written < 0) {
+        std::cerr << "Failed to write response to client\n";
+        close(client_fd);
+    }
+}
+HTTPRequest parse_request(std::string request) {
+    HTTPRequest req;
+    std::stringstream ss(request);
+    std::string line;
+    std::getline(ss, line);
+    std::istringstream line_ss(line);
+    line_ss >> req.method >> req.path >> req.version;
+    while (std::getline(ss, line) && !line.empty()) {
+        size_t pos = line.find(":");
+        if (pos != std::string::npos) {
+            std::string header_name = line.substr(0, pos);
+            std::string header_value = line.substr(pos + 2);
+            header_value.erase(header_value.end() - 1);
+            req.headers[header_name] = header_value;
+        }
+    }
+    std::stringstream body_ss;
+    std::getline(ss, line);
+    body_ss << line;
+    while (std::getline(ss, line)) {
+        body_ss << "\n" << line;
+    }
+    req.body = body_ss.str();
+    return req;
+}
 
 int main(int argc, char **argv) {
   // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -54,6 +113,20 @@ int main(int argc, char **argv) {
   int client = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
   std::cout << "Client connected\n"; 
 
+  char buffer[1024];
+  int ret = read(client, buffer, sizeof(buffer));
+  std::cout<<buffer<<std::endl;
+  std::string request(buffer);
+  auto a = parse_request(request);
+  std::cout<<a.method<<std::endl;
+  std::cout<<a.path<<std::endl;
+  std::cout<<a.version<<std::endl;
+  std::cout<<a.headers["Host"]<<std::endl;
+  std::cout<<a.headers["User-Agent"]<<std::endl;
+  std::cout<<a.headers["Accept"]<<std::endl;
+
+  HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", {}, "Hello, World!" };
+  write_response(client , response);
   close(server_fd);
 
   return 0;
