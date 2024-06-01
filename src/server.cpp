@@ -118,15 +118,33 @@ int main(int argc, char **argv) {
   std::cout<<buffer<<std::endl;
   std::string request(buffer);
   auto a = parse_request(request);
-  std::cout<<a.method<<std::endl;
-  std::cout<<a.path<<std::endl;
-  std::cout<<a.version<<std::endl;
-  std::cout<<a.headers["Host"]<<std::endl;
-  std::cout<<a.headers["User-Agent"]<<std::endl;
-  std::cout<<a.headers["Accept"]<<std::endl;
+  // std::cout<<a.method<<std::endl;
+  // std::cout<<a.path<<std::endl;
+  // std::cout<<a.version<<std::endl;
+  // std::cout<<a.headers["Host"]<<std::endl;
+  // std::cout<<a.headers["User-Agent"]<<std::endl;
+  // std::cout<<a.headers["Accept"]<<std::endl;
+  if(a.method == "GET"){
+    if(a.path == "/"){
+      HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", {}, "Hello, World!" };
+      write_response(client, response);
+    }else if(a.path == "/user-agent"){
+      HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", { {"Content-Length", std::to_string(a.headers["User-Agent"].length())} },a.headers["User-Agent"]};
+      write_response(client , response);
+    } else if (a.path.substr(0, 6) == "/echo/") {
+      std::string subStr = a.path.substr(6);
+      HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", { {"Content-Length", std::to_string(subStr.length())} }, subStr };
+      write_response(client, response);
+    }else {
+      HTTPResponse response = { "HTTP/1.1 404 Not Found", "text/plain", {}, "Not Found" };
+      write_response(client, response);
+    }
+  }else{
+    HTTPResponse response = { "HTTP/1.1 405 Method Not Allowed", "text/plain", {}, "Method Not Allowed" };
+    write_response(client, response);
+  }
 
-  HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", {}, "Hello, World!" };
-  write_response(client , response);
+
   close(server_fd);
 
   return 0;
