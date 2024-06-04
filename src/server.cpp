@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <vector>
 #include <sstream>
+#include <thread>
 
 struct HTTPRequest {
     std::string method;
@@ -68,8 +69,47 @@ HTTPRequest parse_request(std::string request) {
     req.body = body_ss.str();
     return req;
 }
+void handle_http(int client, struct sockaddr_in client_addr){
 
+  char buffer[1024];
+  int ret = read(client, buffer, sizeof(buffer));
+  // std::cout<<buffer<<std::endl;
+  std::string request(buffer);
+  auto a = parse_request(request);
+  // std::cout<<a.method<<std::endl;
+  // std::cout<<a.path<<std::endl;
+  // std::cout<<a.version<<std::endl;
+  // std::cout<<a.headers["Host"]<<std::endl;
+  // std::cout<<a.headers["User-Agent"]<<std::endl;
+  // std::cout<<a.headers["Accept"]<<std::endl;
+  if(a.method == "GET"){
+    if(a.path == "/"){
+      HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", {}, "Hello, World!" };
+      write_response(client, response);
+    }else if(a.path == "/user-agent"){
+      HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", { {"Content-Length", std::to_string(a.headers["User-Agent"].length())} },a.headers["User-Agent"]};
+      write_response(client , response);
+    } else if (a.path.substr(0, 6) == "/echo/") {
+      std::string subStr = a.path.substr(6);
+      HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", { {"Content-Length", std::to_string(subStr.length())} }, subStr };
+      write_response(client, response);
+    }else {
+      HTTPResponse response = { "HTTP/1.1 404 Not Found", "text/plain", {}, "Not Found" };
+      write_response(client, response);
+    }
+  }else{
+    HTTPResponse response = { "HTTP/1.1 405 Method Not Allowed", "text/plain", {}, "Method Not Allowed" };
+    write_response(client, response);
+  }
+}
+void signal_callback_handler(int signum) {
+   std::cout << "Caught signal " << signum << std::endl;
+   // Terminate program
+   exit(signum);
+}
 int main(int argc, char **argv) {
+  signal(SIGINT, signal_callback_handler);
+
   // You can use print statements as follows for debugging, they'll be visible when running tests.
   std::cout << "Logs from your program will appear here!\n";
 
@@ -109,43 +149,16 @@ int main(int argc, char **argv) {
   int client_addr_len = sizeof(client_addr);
   
   std::cout << "Waiting for a client to connect...\n";
-  
-  int client = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
-  std::cout << "Client connected\n"; 
-
-  char buffer[1024];
-  int ret = read(client, buffer, sizeof(buffer));
-  std::cout<<buffer<<std::endl;
-  std::string request(buffer);
-  auto a = parse_request(request);
-  // std::cout<<a.method<<std::endl;
-  // std::cout<<a.path<<std::endl;
-  // std::cout<<a.version<<std::endl;
-  // std::cout<<a.headers["Host"]<<std::endl;
-  // std::cout<<a.headers["User-Agent"]<<std::endl;
-  // std::cout<<a.headers["Accept"]<<std::endl;
-  if(a.method == "GET"){
-    if(a.path == "/"){
-      HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", {}, "Hello, World!" };
-      write_response(client, response);
-    }else if(a.path == "/user-agent"){
-      HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", { {"Content-Length", std::to_string(a.headers["User-Agent"].length())} },a.headers["User-Agent"]};
-      write_response(client , response);
-    } else if (a.path.substr(0, 6) == "/echo/") {
-      std::string subStr = a.path.substr(6);
-      HTTPResponse response = { "HTTP/1.1 200 OK", "text/plain", { {"Content-Length", std::to_string(subStr.length())} }, subStr };
-      write_response(client, response);
-    }else {
-      HTTPResponse response = { "HTTP/1.1 404 Not Found", "text/plain", {}, "Not Found" };
-      write_response(client, response);
-    }
-  }else{
-    HTTPResponse response = { "HTTP/1.1 405 Method Not Allowed", "text/plain", {}, "Method Not Allowed" };
-    write_response(client, response);
-  }
+  int client_fd;
+  while (1)
+  {
+      client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+      std::cout << "Client connected\n";
+      std::thread th(handle_http, client_fd, client_addr);
+      th.detach();
+  };
 
 
   close(server_fd);
-
   return 0;
 }
