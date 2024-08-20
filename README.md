@@ -7,3 +7,6 @@
 - Accept Client Connections
 - Close Server Socket
 ## 
+
+init the server  : ./your_server.sh --directory tmp/
+client :  curl --verbose 127.0.0.1:4221/files/filename
